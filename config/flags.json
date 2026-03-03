@@ -1,0 +1,15 @@
+{
+  "version": "0.1.0",
+  "updated": "2026-03-03",
+  "flags": {
+    "use_async_pipeline":          false,
+    "use_new_embedding":           false,
+    "use_vector_db":               false,
+    "use_relevance_threshold":     false,
+    "use_new_prompt":              false,
+    "enable_query_classifier":     false,
+    "enable_multi_message_split":  false,
+    "enable_session_memory":       false,
+    "enable_experiments":          false
+  }
+}
