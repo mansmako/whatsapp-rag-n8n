@@ -1,0 +1,319 @@
+{
+  "name": "WhatsApp RAG v1 [PROD].",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "24d82e98-1bcb-4892-a88e-0e38635dff28",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "c9167a84-6aa1-4a28-b1ea-5e1b9fbdacc8",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        256,
+        304
+      ],
+      "webhookId": "24d82e98-1bcb-4892-a88e-0e38635dff28"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "userPhone",
+              "value": "={{ $json.From }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "userMessage",
+              "value": "={{ $json.Body }}",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "messageId",
+              "value": "={{ $json.MessageSid }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d1e37f57-9848-451f-b13c-807af35f113a",
+      "name": "Parse Twilio Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        480,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "text-embedding-ada-002"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "={{ $json.userMessage }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "d8c98bb4-648c-4ed6-b888-710049389efe",
+      "name": "Embed User Query",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        704,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://don-spiritus-0x5qz1o.svc.aped-4627-b74a.pinecone.io",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"vector\": {{ $json.embedding }},\n  \"topK\": 3,\n  \"includeMetadata\": true\n}",
+        "options": {}
+      },
+      "id": "14325af9-5929-463b-a6ac-d3ca1387a3ab",
+      "name": "Search Knowledge Base",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        928,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const matches = $input.first().json.matches || [];\n\nlet context = 'Use the following knowledge base entries to answer the user question.\\n\\n';\n\nfor (let i = 0; i < Math.min(3, matches.length); i++) {\n  const match = matches[i];\n  const metadata = match.metadata || {};\n  context += `FAQ ${i + 1}:\\nQ: ${metadata.question || 'N/A'}\\nA: ${metadata.answer || 'N/A'}\\n\\n`;\n}\n\nconst userMessage = $('Parse Twilio Message').first().json.userMessage;\nconst userPhone = $('Parse Twilio Message').first().json.userPhone;\n\nreturn [{\n  json: {\n    context: context.trim(),\n    userMessage: userMessage,\n    userPhone: userPhone\n  }\n}];"
+      },
+      "id": "f1ecb89e-f761-4671-906d-84d854aa07b0",
+      "name": "Build Context for Claude",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1152,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "claude-sonnet-4-20250514"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ $json.context }}\n\nUser Question: {{ $json.userMessage }}"
+            }
+          ]
+        },
+        "options": {
+          "system": "You are a financial literacy assistant for AWFII. You provide general financial education only. You must not provide specific investment or stock recommendations. If asked about stocks, trading, or investments, politely refuse and offer to connect the user with an AWFII mentor.",
+          "maxTokens": 500
+        }
+      },
+      "id": "dc4b53c1-ac77-451f-ae9a-37585ca8c080",
+      "name": "Generate Claude Response",
+      "type": "@n8n/n8n-nodes-langchain.anthropic",
+      "typeVersion": 1,
+      "position": [
+        1376,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "replyText",
+              "value": "={{ $json.content[0].text }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "userPhone",
+              "value": "={{ $('Build Context for Claude').item.json.userPhone }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8a706c53-003d-48ce-a4d0-bd81acd59473",
+      "name": "Extract Response Text",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1728,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "from": "whatsapp:+14155238886",
+        "to": "={{ $json.userPhone }}",
+        "message": "={{ $json.replyText }}",
+        "options": {}
+      },
+      "id": "538ce9b9-aa58-4328-a957-c067b157d90e",
+      "name": "Send WhatsApp Reply",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1952,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"received\"\n}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "6d8676ba-cbda-49ec-a6a1-ec3aefbac269",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2176,
+        304
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Parse Twilio Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Twilio Message": {
+      "main": [
+        [
+          {
+            "node": "Embed User Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embed User Query": {
+      "main": [
+        [
+          {
+            "node": "Search Knowledge Base",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Knowledge Base": {
+      "main": [
+        [
+          {
+            "node": "Build Context for Claude",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Context for Claude": {
+      "main": [
+        [
+          {
+            "node": "Generate Claude Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Claude Response": {
+      "main": [
+        [
+          {
+            "node": "Extract Response Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Response Text": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send WhatsApp Reply": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "7f553079-aa32-4abd-ba7d-6caa81f6ee5f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3deac580ac2fb4e33650af8d8678ebf8fd70ae51f0234bc48cbc71e0e8d87c9f"
+  },
+  "id": "Z794p0zkdY7pgnJw",
+  "tags": []
+}
